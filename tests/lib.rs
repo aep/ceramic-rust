@@ -5,12 +5,9 @@ extern crate rain;
 
 mod tests {
     use ceramic;
-    use rain::Graph;
 
     #[test]
     fn recv_on_main_send_in_subproc() {
-        let mut graph = Graph::new();
-
         let chan   = ceramic::Chan::new();
 
         ceramic::Proc::new(|| {
@@ -44,5 +41,21 @@ mod tests {
         chan.send(&String::from("ping"));
         let s : String = chan.recv().unwrap();
         assert_eq!(s, "pong");
+    }
+    #[test]
+    fn two_forks_firewatch(){
+        let chan  = ceramic::Chan::new();
+
+        ceramic::Proc::new(|| {
+            chan.recv::<String>().unwrap();
+        });
+
+        ceramic::Proc::new(|| {
+            chan.recv::<String>().unwrap();
+        });
+
+        chan.send(&String::from("ping"));
+        chan.send(&String::from("ping"));
+        assert!(true);
     }
 }

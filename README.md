@@ -5,9 +5,6 @@
 [![docs](https://docs.rs/ceramic/badge.svg)](https://docs.rs/ceramic)
 
 
-DONT USE THIS. The implementation is dangerously wrong
-=====================================================
-
 Synchronous channels for rust between proccesses
 -------------------------------------------------
 
@@ -29,12 +26,11 @@ use ceramic;
 fn main() {
     let chan   = ceramic::Chan::new();
     let thread = ceramic::Proc::new(|| {
-        chan.send(String::from("hello").as_bytes());
+        chan.send(&String::from("hello"));
     });
 
-    let mut buf = [0;128];
-    chan.recv(&mut buf);
-    println!("parent received: {}", String::from_utf8_lossy(&buf));
+    let s : String = chan.recv().unwrap();
+    println!("parent received: {}", s);
 }
 ```
 
