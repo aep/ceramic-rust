@@ -1,8 +1,8 @@
 [![Build Status](https://travis-ci.org/aep/ceramic-rust.svg?branch=master)](https://travis-ci.org/aep/ceramic-rust)
+[![Coverage Status](https://coveralls.io/repos/github/aep/ceramic-rust/badge.svg?branch=master)](https://coveralls.io/github/aep/ceramic-rust?branch=master)
 [![crates.io](http://meritbadge.herokuapp.com/ceramic)](https://crates.io/crates/ceramic)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE-MIT)
 [![docs](https://docs.rs/ceramic/badge.svg)](https://docs.rs/ceramic)
-[![Coverage Status](https://coveralls.io/repos/github/aep/ceramic-rust/badge.svg?branch=master)](https://coveralls.io/github/aep/ceramic-rust?branch=master)
 
 
 Synchronous channels for rust between proccesses
