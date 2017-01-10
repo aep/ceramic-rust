@@ -15,10 +15,8 @@ mod tests {
             println!("child");
             chan.send(String::from("hello").as_bytes());
         });
-
         let mut buf = [0;128];
         chan.recv(&mut buf);
-
         println!("parent received: {}", String::from_utf8_lossy(&buf));
     }
 }
