@@ -9,5 +9,6 @@ homepage = "https://github.com/aep/ceramic-rust"
 documentation = "https://docs.rs/ceramic/"
 
 [dependencies]
-nix = "0.7.0"
-
+nix     = "0.7.0"
+bincode = "0.6.1"
+rustc-serialize = "0.3"

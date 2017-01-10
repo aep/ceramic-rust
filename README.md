@@ -5,8 +5,12 @@
 [![docs](https://docs.rs/ceramic/badge.svg)](https://docs.rs/ceramic)
 
 
+DONT USE THIS. The implementation is dangerously wrong
+=====================================================
+
 Synchronous channels for rust between proccesses
 -------------------------------------------------
+
 
 This is a rust port of [https://github.com/aep/ceramic](https://github.com/aep/ceramic).
 
