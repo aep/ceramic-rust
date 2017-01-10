@@ -1,3 +1,7 @@
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE-MIT)
+[![crates.io](http://meritbadge.herokuapp.com/ceramic)](https://crates.io/crates/ceramic)
+[![docs](https://docs.rs/ceramic/badge.svg)](https://docs.rs/ceramic)
+
 
 Synchronous channels for rust between proccesses
 -------------------------------------------------
