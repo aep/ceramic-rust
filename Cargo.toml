@@ -1,9 +1,12 @@
 [package]
 name = "ceramic"
-version = "0.1.0"
+version = "0.1.2"
 authors = ["Arvid E. Picciani <aep@exys.org>"]
 license = "MIT"
 description = "Synchronous channels between proccesses"
+repository = "https://github.com/aep/ceramic-rust.git"
+homepage = "https://github.com/aep/ceramic-rust"
+documentation = "https://docs.rs/ceramic/"
 
 [dependencies]
 nix = "0.7.0"
