@@ -8,6 +8,3 @@ description = "Synchronous channels between proccesses"
 [dependencies]
 nix = "0.7.0"
 
-[dev-dependencies]
-stainless = "0.1.10"
-

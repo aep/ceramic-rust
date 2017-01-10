@@ -1,5 +1,3 @@
-#![feature(plugin)]
-#![cfg_attr(test, plugin(stainless))]
 #[cfg(test)]
 
 extern crate ceramic;
