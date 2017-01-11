@@ -6,9 +6,45 @@ use std::os::unix::io::RawFd;
 use self::nix::unistd::ForkResult;
 use self::nix::sys::socket;
 use std::process::exit;
-use self::nix::unistd;
+use std::error;
+use std::fmt;
 
 use bincode::SizeLimit;
+
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Error {
+    Sys(nix::Errno),
+    ChannelClosed,
+}
+
+impl From<nix::Error> for Error {
+    fn from(t: nix::Error) -> Error {
+        match t {
+            nix::Error::Sys(e) => Error::Sys(e),
+            _ => Error::Sys(nix::Errno::UnknownErrno),
+        }
+    }
+
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match self {
+            &Error::ChannelClosed => "Closed",
+            &Error::Sys(ref errno) => errno.desc(),
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Error::ChannelClosed => write!(f, "Closed"),
+            &Error::Sys(errno) => write!(f, "{:?}: {}", errno, errno.desc()),
+        }
+    }
+}
 
 pub struct Chan {
     start: (RawFd,RawFd),
@@ -17,83 +53,94 @@ pub struct Chan {
 }
 
 impl Chan {
-    pub fn send<T>(&self, t:&T) -> bool where T: rustc_serialize::Encodable {
-        let encoded: Vec<u8> = bincode::rustc_serialize::encode(t, SizeLimit::Bounded(8000)).unwrap();
 
-        let mut void = [0;1];
-
-        //println!("{} r- start.0", unistd::getpid());
-        let u = socket::recv(self.start.0, &mut void,    socket::MSG_EOR).expect("recv failed");
-        //println!("{} r+ start.0", unistd::getpid());
-        if u != 1 {
-            return false
+    pub fn set_timeout(&self, dur: Option<std::time::Duration>) -> Result<(), Error> {
+        let tv = nix::sys::time::TimeVal {
+            tv_sec:   match dur { Some(e) => e.as_secs() as i64, None => 0 },
+            tv_usec:  match dur { Some(e) => {
+                if e.subsec_nanos() < 1000 {
+                    1 as i64
+                } else {
+                    (e.subsec_nanos() / 1000) as i64
+                }
+            }, None => 0},
         };
 
-        //println!("{} w- data.0", unistd::getpid());
-        let u = socket::send(self.data.0, &encoded[..], socket::MSG_EOR).expect("send failed");
-        //println!("{} w+ data.0", unistd::getpid());
-        if u < 1 {
-            return false;
-        };
+        socket::setsockopt(self.start.0, socket::sockopt::ReceiveTimeout, &tv)?;
+        socket::setsockopt(self.start.1, socket::sockopt::ReceiveTimeout, &tv)?;
+        socket::setsockopt(self.data.0,  socket::sockopt::ReceiveTimeout, &tv)?;
+        socket::setsockopt(self.data.1,  socket::sockopt::ReceiveTimeout, &tv)?;
+        socket::setsockopt(self.end.0,   socket::sockopt::ReceiveTimeout, &tv)?;
+        socket::setsockopt(self.end.1,   socket::sockopt::ReceiveTimeout, &tv)?;
 
-        //println!("{} r-  end.0", unistd::getpid());
-        let u = socket::recv(self.end.0, &mut void,    socket::MSG_EOR).expect("recv failed");
-        //println!("{} r+  end.0", unistd::getpid());
-        if u != 1 {
-            return false;
-        };
-
-        return true;
+        return Ok(())
     }
 
-    pub fn recv<T>(&self) -> Result<T, nix::Error> where T: rustc_serialize::Decodable {
+    pub fn send<T>(&self, t:&T) -> Result<(), Error>  where T: rustc_serialize::Encodable {
+        let encoded: Vec<u8> = bincode::rustc_serialize::encode(t, SizeLimit::Bounded(8000)).unwrap();
+        self._write(&encoded[..])
+    }
 
+    fn _write(&self, b: &[u8]) -> Result<(), Error>{
+        let mut void = [0;1];
+
+        let u = socket::recv(self.start.0, &mut void, socket::MSG_EOR)?;
+        if  u < 1 {
+            return Err(Error::ChannelClosed)
+        }
+        socket::send(self.data.1, b, socket::MSG_EOR)?;
+        let u = socket::recv(self.end.0, &mut void,    socket::MSG_EOR)?;
+        if  u < 1 {
+            return Err(Error::ChannelClosed)
+        }
+
+        return Ok(());
+    }
+
+    pub fn recv<T>(&self) -> Result<T, Error> where T: rustc_serialize::Decodable {
         let mut buf = [0;8000];
-        //println!("{} w- start.1", unistd::getpid());
-        let u = socket::send(self.start.1, &[0;1]  , socket::MSG_EOR ).expect("send failed");
-        //println!("{} w+ start.1", unistd::getpid());
-        if u != 1 {
-            return Err(nix::Error::Sys(nix::Errno::UnknownErrno))
-        }
 
-        //println!("{} r- data.1", unistd::getpid());
-        let u = socket::recv(self.data.1, &mut buf, socket::MSG_EOR ).expect("recv failed");
-        //println!("{} r+ data.1", unistd::getpid());
-        if u < 1  {
-            return Err(nix::Error::Sys(nix::Errno::UnknownErrno))
+        socket::send(self.start.1, &[0;1]  , socket::MSG_EOR )?;
+        let u = socket::recv(self.data.0, &mut buf, socket::MSG_EOR )?;
+        if  u < 1 {
+            return Err(Error::ChannelClosed)
         }
-
-        //println!("{} w-  end.1", unistd::getpid());
-        let u = socket::send(self.end.1, &[0;1]  , socket::MSG_EOR ).expect("send failed");
-        //println!("{} w+  end.1", unistd::getpid());
-        if u != 1 {
-            return Err(nix::Error::Sys(nix::Errno::UnknownErrno))
-        }
+        socket::send(self.end.1, &[0;1]  , socket::MSG_EOR )?;
 
         let decoded: T = bincode::rustc_serialize::decode(&buf[..]).unwrap();
         Ok(decoded)
     }
 
-    pub fn new() -> Chan {
-        Chan {
-            start: socket::socketpair(socket::AddressFamily::Unix, socket::SockType::Datagram, 0, socket::SockFlag::empty()).expect("socketpair failed"),
-            data:  socket::socketpair(socket::AddressFamily::Unix, socket::SockType::Datagram, 0, socket::SockFlag::empty()).expect("socketpair failed"),
-            end:   socket::socketpair(socket::AddressFamily::Unix, socket::SockType::Datagram, 0, socket::SockFlag::empty()).expect("socketpair failed"),
-        }
+    pub fn close(&self) -> Result<(), Error> {
+        socket::send(self.start.1, &[0;0], socket::MSG_EOR)?;
+        socket::send(self.data.1,  &[0;0], socket::MSG_EOR)?;
+        socket::send(self.end.1,   &[0;0], socket::MSG_EOR)?;
+        return Ok(())
     }
+}
+
+pub fn channel() -> Result<Chan, nix::Error> {
+    let start = socket::socketpair(socket::AddressFamily::Unix, socket::SockType::Datagram, 0, socket::SockFlag::empty());
+    let data  = socket::socketpair(socket::AddressFamily::Unix, socket::SockType::Datagram, 0, socket::SockFlag::empty());
+    let end   = socket::socketpair(socket::AddressFamily::Unix, socket::SockType::Datagram, 0, socket::SockFlag::empty());
+    Ok(Chan {start: start?, data: data?, end: end? })
 }
 
 pub struct Proc {
 }
 
-impl Proc {
-    pub fn new<F>(start: F) -> Proc where F: Fn(){
-        if let ForkResult::Child = nix::unistd::fork().expect("fork failed") {
-            start();
-            exit(0);
-        };
-        Proc{}
-    }
+
+pub fn fork<F>(start: F) -> Proc where F: Fn(){
+    if let ForkResult::Child = nix::unistd::fork().expect("fork failed") {
+        start();
+        exit_must_not_continue();
+    };
+    Proc{}
 }
 
+#[allow(unreachable_code)]
+fn exit_must_not_continue() ->!{
+    exit(0);
+    loop{}
+}
 
