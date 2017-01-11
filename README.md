@@ -5,18 +5,20 @@
 [![docs](https://docs.rs/ceramic/badge.svg)](https://docs.rs/ceramic)
 
 
-Synchronous channels for rust between proccesses
+Synchronous channels for rust between posix proccesses
 -------------------------------------------------
-
-
-This is a rust port of [https://github.com/aep/ceramic](https://github.com/aep/ceramic).
-
-I'm just starting to learn rust, so this is not production ready code yet.
 
 Ceramic is a simple and effective way to isolate rust code into processes.
 
+It fullfills the same use case as servo/ipc-channel, but with a much more consistent and simple design.
+The downside is that it only works on posix compliant systems.
+
+Serialize and Deserialize traits are required for all types passed over the channel.
+
+This is a rust port of the original C++ library [https://github.com/aep/ceramic](https://github.com/aep/ceramic).
+
 A famous example of terrible api is gethostbyname.
-POSIX actually removed it, because it's shit, but alot of unix code still uses it,
+POSIX actually removed it, because it's shit, but a lot of unix code still uses it,
 and so we have to deal with library calls that simply never terminate.
 
 
@@ -24,13 +26,32 @@ and so we have to deal with library calls that simply never terminate.
 use ceramic;
 
 fn main() {
-    let chan   = ceramic::Chan::new();
-    let thread = ceramic::Proc::new(|| {
-        chan.send(&String::from("hello"));
+    let chan = ceramic::channel().unwrap();
+    ceramic::fork(|| {
+        chan.send(&String::from("hello")).unwrap();
     });
 
-    let s : String = chan.recv().unwrap();
-    println!("parent received: {}", s);
+    let s : String = chan.recv().unwrap().unwrap_or(String::from("nothing"));
+    println!("{}", s);
+}
+```
+
+
+or use it as iterator:
+
+```rust
+fn main() {
+   let chan = ceramic::channel().unwrap();
+
+   ceramic::fork(|| {
+       chan.send(&String::from("herp")).unwrap();
+       chan.send(&String::from("derp")).unwrap();
+       chan.close().unwrap();
+   });
+
+   for s in chan {
+       println!(">>{}<<", s.unwrap());
+   }
 }
 ```
 
@@ -98,11 +119,8 @@ TODO
 ----
 
 - api to clean up unused sockets
-- tests for close
-- close doesnt stop write yet
+- correct close write semantics are unclear
 - tests with pthread
 - deadlock detection
-- use more efficient streaming
 - test on osx
-- automate tests + coverage
 
