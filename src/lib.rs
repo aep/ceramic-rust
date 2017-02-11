@@ -5,7 +5,11 @@ extern crate rustc_serialize;
 use std::os::unix::io::RawFd;
 use self::nix::unistd::ForkResult;
 use self::nix::sys::socket;
+use self::nix::libc::pid_t;
+use self::nix::sys::signal::kill;
+use nix::sys::signal::Signal;
 use std::process::exit;
+use nix::sys::wait;
 
 use bincode::SizeLimit;
 
@@ -99,15 +103,29 @@ pub fn channel<T>() -> Result<Chan<T>, nix::Error>  where T: rustc_serialize::De
 }
 
 pub struct Proc {
+    pid: pid_t
+}
+
+impl Drop for Proc {
+    fn drop(&mut self) {
+        if wait::waitpid(self.pid, Some(wait::WNOHANG)) == Ok(wait::WaitStatus::StillAlive) {
+            kill(self.pid, Signal::SIGTERM).unwrap();
+        }
+
+    }
 }
 
 
 pub fn fork<F>(start: F) -> Proc where F: Fn(){
-    if let ForkResult::Child = nix::unistd::fork().expect("fork failed") {
-        start();
-        exit_must_not_continue();
-    };
-    Proc{}
+    match nix::unistd::fork().expect("fork failed") {
+        ForkResult::Child => {
+            start();
+            exit_must_not_continue();
+        }
+        ForkResult::Parent{child} => {
+            Proc{pid:child}
+        }
+    }
 }
 
 #[allow(unreachable_code)]
